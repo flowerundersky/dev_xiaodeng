@@ -1,0 +1,1 @@
+cmd_/home/jetson/knote_project/knote.ko := ld -EL -r  -T ./scripts/module-common.lds -T ./arch/arm64/kernel/module.lds --build-id  -o /home/jetson/knote_project/knote.ko /home/jetson/knote_project/knote.o /home/jetson/knote_project/knote.mod.o ;  true
