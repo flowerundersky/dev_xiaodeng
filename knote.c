@@ -68,9 +68,6 @@ out:
 	}
 
 
-
-
-
 static ssize_t knote_read(struct file *file, char __user*user_buffer,size_t count, loff_t *ppos)
 {
 	ssize_t ret;
@@ -104,21 +101,21 @@ out:
 static int __init knote_init(void)
 {
 	int ret; 
-	ret= alloc_chrdev_region(&knote_devno,0,1,KNOTE_DEVICE_NAME);
+	ret= alloc_chrdev_region(&knote_devno,0,1,KNOTE_DEVICE_NAME);  #minor 从0开始申请1个设备，名字叫做“。。”
 	if(ret<0){
 		pr_err("knote: alloc_chrdev_region fail:%d\n",ret);
 		return ret;
 	}
-	cdev_init(&knote_cdev,&knote_fops);
+	cdev_init(&knote_cdev,&knote_fops);                             #初始化cdev结构体，设备对象
 	knote_cdev.owner=THIS_MODULE;
 
-	ret=cdev_add(&knote_cdev,knote_devno,1);
+	ret=cdev_add(&knote_cdev,knote_devno,1);                        #将cdev结构体添加到内核中，注册设备
 	if(ret<0){
 		pr_err("knote: cdev_add  fail:%d\n",ret);
 		goto err_unregister_chrdev;
 	}
 	
-	knote_class=class_create(THIS_MODULE,KNOTE_CLASS_NAME);
+	knote_class=class_create(THIS_MODULE,KNOTE_CLASS_NAME);    
 	if(IS_ERR(knote_class)){
 		ret=PTR_ERR(knote_class);
 		pr_err("knote:device_create failed:%d\n",ret);
