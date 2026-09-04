@@ -6,6 +6,10 @@
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 #include <linux/mutex.h>
+#include <linux/atomic.h>  //原子量
+#include <linux/completion.h> //完成量
+#include <linux/jiffies.h> //如果使用 `wait_for_completion_timeout`，需要加
+
 
 #define KNOTE_DEVICE_NAME "knote"
 #define KNOTE_CLASS_NAME  "knote"
@@ -18,7 +22,15 @@ static struct class *knote_class;
 static struct device *knote_device;
 static char knote_buffer[KNOTE_BUFFER_SIZE];
 static size_t knote_size;
-static DEFINE_MUTEX(knote_lock);
+static DEFINE_MUTEX(knote_lock); //未定义knote_lock
+
+/*解决oops问题*/
+static atomic_t knote_open_cnt=ATOMIC_INIT(0);
+static atomic_t knote_exiting=ATOMIC_INIT(0);
+static struct complition knote_open_zero;
+init_complition(&knote_open_zero);
+
+
 
 static const struct file_operations knote_fops={
 	.owner=THIS_MODULE,
@@ -30,15 +42,25 @@ static const struct file_operations knote_fops={
 
 static int knote_open(struct inode *inode, struct file *file)
 {
+	if(atomic_read(&knote_exiting)){
+		return -EBUSY;
+	}
+	atomic_init(&knote_open_cnt);
 	pr_info("knote: open\n");
 	return 0;
 	}
 
 static int knote_release(struct inode *inode, struct file *file)
 {
+	if(atomic_dec_and_test(&knote_open_cnt)){
+		complete(&knote_open_zero);
+	}
 	pr_info("knote: release\n");
 	return 0;
 	}
+
+
+//loff_t *ppos  pointer to position：读写位置指针
 
 static ssize_t knote_write(struct file *file, const char __user*user_buffer,size_t count, loff_t *ppos)
 {
@@ -72,9 +94,10 @@ static ssize_t knote_read(struct file *file, char __user*user_buffer,size_t coun
 {
 	ssize_t ret;
 	
-	if(mutex_lock_interruptible(&knote_lock))
+	if(mutex_lock_interruptible(&knote_lock)){
 		return -ERESTARTSYS;
-
+		}
+	
 	if(*ppos>=knote_size){
 		ret=0;
 		goto out;
@@ -82,7 +105,7 @@ static ssize_t knote_read(struct file *file, char __user*user_buffer,size_t coun
 	if(count>knote_size- *ppos)
 		count=knote_size- *ppos;	
 	
-	if(copy_to_user(knote_buffer,user_buffer+ *ppos,count)){
+	if(copy_to_user(user_buffer,knote_buffer+*ppos,count)){
 		ret= -EFAULT;
 		goto out;
 		}
@@ -118,7 +141,7 @@ static int __init knote_init(void)
 	knote_class=class_create(THIS_MODULE,KNOTE_CLASS_NAME);    
 	if(IS_ERR(knote_class)){
 		ret=PTR_ERR(knote_class);
-		pr_err("knote:device_create failed:%d\n",ret);
+		pr_err("knote:class_create failed:%d\n",ret);
 		goto err_cdev_del;
 	}
 
@@ -156,6 +179,8 @@ err_unregister_chrdev:
 
 static void __exit knote_exit(void)
 {
+	atomaic_set(&knote_exiting);
+	wait_for_completion(&knote_open_zero);
 	device_destroy(knote_class,knote_devno);
 	class_destroy(knote_class);
 	cdev_del(&knote_cdev);
@@ -170,4 +195,4 @@ module_exit(knote_exit);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("gold_star");
 MODULE_DESCRIPTION("Minimal knote kernel moudle");
-MODULE_VERSION("V26.0.2");
+MODULE_VERSION("V1.0.3");
