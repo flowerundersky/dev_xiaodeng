@@ -27,7 +27,7 @@ static DEFINE_MUTEX(knote_lock); //未定义knote_lock
 /*解决oops问题*/
 static atomic_t knote_open_cnt=ATOMIC_INIT(0);
 static atomic_t knote_exiting=ATOMIC_INIT(0);
-static struct complition knote_open_zero;
+static struct completion knote_open_zero;
 init_complition(&knote_open_zero);
 
 
@@ -45,7 +45,7 @@ static int knote_open(struct inode *inode, struct file *file)
 	if(atomic_read(&knote_exiting)){
 		return -EBUSY;
 	}
-	atomic_init(&knote_open_cnt);
+	atomic_inc(&knote_open_cnt);
 	pr_info("knote: open\n");
 	return 0;
 	}
@@ -123,6 +123,8 @@ out:
 
 static int __init knote_init(void)
 {
+	init_completion(&knote_open_zero);
+
 	int ret; 
 	ret= alloc_chrdev_region(&knote_devno,0,1,KNOTE_DEVICE_NAME);  #minor 从0开始申请1个设备，名字叫做“。。”
 	if(ret<0){
@@ -179,7 +181,7 @@ err_unregister_chrdev:
 
 static void __exit knote_exit(void)
 {
-	atomaic_set(&knote_exiting);
+	atomic_set(&knote_exiting);
 	wait_for_completion(&knote_open_zero);
 	device_destroy(knote_class,knote_devno);
 	class_destroy(knote_class);
@@ -195,4 +197,4 @@ module_exit(knote_exit);
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("gold_star");
 MODULE_DESCRIPTION("Minimal knote kernel moudle");
-MODULE_VERSION("V1.0.3");
+MODULE_VERSION("V1.0.4");
